@@ -1,10 +1,11 @@
 import { useRef, useState } from "react";
 
 export default function UploadPanel() {
-  const fileRef = useRef(null);
+  const galleryRef = useRef(null);
+  const cameraRef = useRef(null);
   const videoRef = useRef(null);
 
-const API = "https://florascan-ai-powered-plant-analysis-tool.onrender.com";
+  const API = "https://florascan-ai-powered-plant-analysis-tool.onrender.com";
 
   const [preview, setPreview] = useState(null);
   const [result, setResult] = useState("Upload or capture an image to begin.");
@@ -17,31 +18,42 @@ const API = "https://florascan-ai-powered-plant-analysis-tool.onrender.com";
   const [stream, setStream] = useState(null);
 
   /* =========================
-     FILE UPLOAD
+     FILE HANDLER (COMMON)
   ========================= */
   const handleUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     setPreview(URL.createObjectURL(file));
-    setShowDownload(false);
     setShowCamera(false);
+    setShowDownload(false);
   };
 
   /* =========================
-     OPEN CAMERA
+     OPEN CAMERA (DESKTOP + MOBILE)
   ========================= */
   const openCamera = async () => {
-    const mediaStream = await navigator.mediaDevices.getUserMedia({
-      video: true,
-    });
-    videoRef.current.srcObject = mediaStream;
-    setStream(mediaStream);
-    setShowCamera(true);
+    // 📱 Mobile → native camera input
+    if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      cameraRef.current.click();
+      return;
+    }
+
+    // 💻 Desktop → webcam
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+      });
+      videoRef.current.srcObject = mediaStream;
+      setStream(mediaStream);
+      setShowCamera(true);
+    } catch (err) {
+      alert("Camera permission denied");
+    }
   };
 
   /* =========================
-     CAPTURE PHOTO
+     CAPTURE PHOTO (DESKTOP)
   ========================= */
   const capturePhoto = () => {
     const canvas = document.createElement("canvas");
@@ -52,13 +64,10 @@ const API = "https://florascan-ai-powered-plant-analysis-tool.onrender.com";
     ctx.drawImage(videoRef.current, 0, 0);
 
     canvas.toBlob((blob) => {
-      const file = new File([blob], "capture.jpg", {
-        type: "image/jpeg",
-      });
-
-      const dataTransfer = new DataTransfer();
-      dataTransfer.items.add(file);
-      fileRef.current.files = dataTransfer.files;
+      const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      galleryRef.current.files = dt.files;
 
       setPreview(URL.createObjectURL(blob));
     });
@@ -68,20 +77,23 @@ const API = "https://florascan-ai-powered-plant-analysis-tool.onrender.com";
   };
 
   /* =========================
-     ANALYZE PLANT (FIXED)
+     ANALYZE PLANT
   ========================= */
   const analyzePlant = async () => {
-    if (!fileRef.current.files[0]) {
+    const file =
+      galleryRef.current.files[0] || cameraRef.current.files[0];
+
+    if (!file) {
       alert("Please upload or capture an image");
       return;
     }
 
     const formData = new FormData();
-    formData.append("image", fileRef.current.files[0]);
+    formData.append("image", file);
 
     setLoading(true);
-    setShowDownload(false);
     setResult("Analyzing plant...");
+    setShowDownload(false);
 
     try {
       const res = await fetch(`${API}/analyze`, {
@@ -89,17 +101,13 @@ const API = "https://florascan-ai-powered-plant-analysis-tool.onrender.com";
         body: formData,
       });
 
-      if (!res.ok) {
-        throw new Error("Server error");
-      }
+      if (!res.ok) throw new Error("Server error");
 
       const data = await res.json();
-
       setResult(data.result);
       setImageData(data.image);
       setShowDownload(true);
-    } catch (err) {
-      console.error(err);
+    } catch {
       setResult("❌ Failed to analyze plant. Please try again.");
     } finally {
       setLoading(false);
@@ -107,22 +115,17 @@ const API = "https://florascan-ai-powered-plant-analysis-tool.onrender.com";
   };
 
   /* =========================
-     DOWNLOAD PDF (FIXED)
+     DOWNLOAD PDF
   ========================= */
   const downloadPDF = async () => {
     try {
       const res = await fetch(`${API}/download`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          result,
-          image: imageData,
-        }),
+        body: JSON.stringify({ result, image: imageData }),
       });
 
-      if (!res.ok) {
-        throw new Error("PDF error");
-      }
+      if (!res.ok) throw new Error();
 
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -133,7 +136,7 @@ const API = "https://florascan-ai-powered-plant-analysis-tool.onrender.com";
       a.click();
 
       URL.revokeObjectURL(url);
-    } catch (err) {
+    } catch {
       alert("❌ Failed to download PDF");
     }
   };
@@ -161,11 +164,11 @@ const API = "https://florascan-ai-powered-plant-analysis-tool.onrender.com";
               <button
                 className="secondary"
                 onClick={() => {
-                  fileRef.current.click();
+                  galleryRef.current.click();
                   setShowOptions(false);
                 }}
               >
-                <i className="fa-solid fa-folder-open"></i> Choose from Drive
+                <i className="fa-solid fa-folder-open"></i> Choose from Device
               </button>
 
               <button
@@ -180,10 +183,21 @@ const API = "https://florascan-ai-powered-plant-analysis-tool.onrender.com";
             </div>
           )}
 
+          {/* GALLERY INPUT */}
           <input
-            ref={fileRef}
+            ref={galleryRef}
             type="file"
             accept="image/*"
+            hidden
+            onChange={handleUpload}
+          />
+
+          {/* CAMERA INPUT (MOBILE ONLY) */}
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
             hidden
             onChange={handleUpload}
           />
@@ -193,6 +207,8 @@ const API = "https://florascan-ai-powered-plant-analysis-tool.onrender.com";
               <video
                 ref={videoRef}
                 autoPlay
+                playsInline
+                muted
                 style={{
                   width: "100%",
                   borderRadius: "12px",
@@ -207,7 +223,7 @@ const API = "https://florascan-ai-powered-plant-analysis-tool.onrender.com";
             <img
               src={preview}
               alt="preview"
-              style={{ display: "block" }}
+              style={{ width: "100%", marginTop: "15px" }}
             />
           )}
 
