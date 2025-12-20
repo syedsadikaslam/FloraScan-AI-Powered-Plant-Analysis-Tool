@@ -10,81 +10,42 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 dotenv.config();
 
-const fsPromises = fs.promises;
-
-// __dirname fix for ES module
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const port = process.env.PORT || 5000;
 
-/* ===============================
-   REQUIRED MIDDLEWARE
-================================ */
-
-// CORS – FRONTEND URL YAHAN AATA HAI
-app.use(
-  cors({
-    origin: [
-      "http://localhost:5173",          // ✅ local frontend (Vite)
-      "https://florascanai.vercel.app", // ✅ deployed frontend
-    ],
-    methods: ["GET", "POST"],
-  })
-);
-
+/* ================= CORS FIX ================= */
+app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: "10mb" }));
-app.use(express.static("public"));
 
-/* ===============================
-   FIX: Render upload folder issue
-================================ */
-
+/* ================= UPLOAD DIR ================= */
 const uploadDir = path.join(__dirname, "upload");
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir);
-}
-
-// configure multer
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 const upload = multer({ dest: uploadDir });
 
-/* ===============================
-   GOOGLE GEMINI INIT
-================================ */
-
+/* ================= GEMINI ================= */
+if (!process.env.GEMINI_API_KEY) {
+  console.error("❌ GEMINI_API_KEY missing");
+}
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-/* ===============================
-   ROOT ROUTE (Health Check)
-================================ */
-
+/* ================= HEALTH ================= */
 app.get("/", (req, res) => {
-  res.send("🌿 FloraScan API is running successfully");
+  res.send("🌿 FloraScan API is running");
 });
 
-/* ===============================
-   ANALYZE ROUTE
-================================ */
-
+/* ================= ANALYZE ================= */
 app.post("/analyze", upload.single("image"), async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: "No image file uploaded" });
-    }
-
     const imagePath = req.file.path;
+    const imageData = fs.readFileSync(imagePath, "base64");
 
-    const imageData = await fsPromises.readFile(imagePath, {
-      encoding: "base64",
-    });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-    });
-
-    const result = await model.generateContent([
-      "Analyze this plant image and provide detailed analysis of its species, health, care recommendations, characteristics, care instructions, and interesting facts. Respond in plain text only.",
+    const response = await model.generateContent([
+      "Analyze this plant image. Give species, health, care tips, and facts.",
       {
         inlineData: {
           mimeType: req.file.mimetype,
@@ -93,74 +54,41 @@ app.post("/analyze", upload.single("image"), async (req, res) => {
       },
     ]);
 
-    const plantInfo = result.response.text();
-
-    // remove uploaded image
-    await fsPromises.unlink(imagePath);
+    fs.unlinkSync(imagePath);
 
     res.json({
-      result: plantInfo,
+      result: response.response.text(),
       image: `data:${req.file.mimetype};base64,${imageData}`,
     });
-  } catch (error) {
-    console.error("❌ Error analyzing image:", error);
-    res.status(500).json({
-      error: "An error occurred while analyzing the image",
-    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Plant analysis failed" });
   }
 });
 
-/* ===============================
-   DOWNLOAD PDF ROUTE
-================================ */
-
+/* ================= PDF ================= */
 app.post("/download", async (req, res) => {
   const { result, image } = req.body;
 
-  try {
-    const reportsDir = path.join(__dirname, "reports");
-    await fsPromises.mkdir(reportsDir, { recursive: true });
+  const doc = new PDFDocument();
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", "attachment; filename=FloraScan_Report.pdf");
 
-    const filename = `plant_analysis_report_${Date.now()}.pdf`;
-    const filePath = path.join(reportsDir, filename);
+  doc.pipe(res);
+  doc.fontSize(20).text("Plant Analysis Report", { align: "center" });
+  doc.moveDown();
+  doc.fontSize(12).text(result);
 
-    const doc = new PDFDocument();
-    const writeStream = fs.createWriteStream(filePath);
-
-    doc.pipe(writeStream);
-
-    doc.fontSize(24).text("Plant Analysis Report", { align: "center" });
-    doc.moveDown();
-    doc.fontSize(14).text(`Date: ${new Date().toLocaleDateString()}`);
-    doc.moveDown();
-    doc.fontSize(12).text(result || "No analysis data provided");
-
-    if (image) {
-      const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
-      const buffer = Buffer.from(base64Data, "base64");
-      doc.moveDown();
-      doc.image(buffer, { fit: [500, 300], align: "center" });
-    }
-
-    doc.end();
-
-    writeStream.on("finish", async () => {
-      res.download(filePath, async () => {
-        await fsPromises.unlink(filePath);
-      });
-    });
-  } catch (error) {
-    console.error("❌ Error generating PDF:", error);
-    res.status(500).json({
-      error: "An error occurred while generating the PDF report",
-    });
+  if (image) {
+    const base64 = image.split(",")[1];
+    const buffer = Buffer.from(base64, "base64");
+    doc.addPage().image(buffer, { fit: [500, 300], align: "center" });
   }
+
+  doc.end();
 });
 
-/* ===============================
-   START SERVER
-================================ */
-
+/* ================= START ================= */
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
