@@ -4,6 +4,8 @@ export default function UploadPanel() {
   const fileRef = useRef(null);
   const videoRef = useRef(null);
 
+  const API = import.meta.env.VITE_API_URL;
+
   const [preview, setPreview] = useState(null);
   const [result, setResult] = useState("Upload or capture an image to begin.");
   const [imageData, setImageData] = useState(null);
@@ -14,7 +16,9 @@ export default function UploadPanel() {
   const [showCamera, setShowCamera] = useState(false);
   const [stream, setStream] = useState(null);
 
-  // ===== DRIVE UPLOAD =====
+  /* =========================
+     FILE UPLOAD
+  ========================= */
   const handleUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -24,7 +28,9 @@ export default function UploadPanel() {
     setShowCamera(false);
   };
 
-  // ===== OPEN CAMERA =====
+  /* =========================
+     OPEN CAMERA
+  ========================= */
   const openCamera = async () => {
     const mediaStream = await navigator.mediaDevices.getUserMedia({
       video: true,
@@ -34,7 +40,9 @@ export default function UploadPanel() {
     setShowCamera(true);
   };
 
-  // ===== CAPTURE PHOTO =====
+  /* =========================
+     CAPTURE PHOTO
+  ========================= */
   const capturePhoto = () => {
     const canvas = document.createElement("canvas");
     canvas.width = videoRef.current.videoWidth;
@@ -44,7 +52,9 @@ export default function UploadPanel() {
     ctx.drawImage(videoRef.current, 0, 0);
 
     canvas.toBlob((blob) => {
-      const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
+      const file = new File([blob], "capture.jpg", {
+        type: "image/jpeg",
+      });
 
       const dataTransfer = new DataTransfer();
       dataTransfer.items.add(file);
@@ -57,7 +67,9 @@ export default function UploadPanel() {
     setShowCamera(false);
   };
 
-  // ===== ANALYZE =====
+  /* =========================
+     ANALYZE PLANT (FIXED)
+  ========================= */
   const analyzePlant = async () => {
     if (!fileRef.current.files[0]) {
       alert("Please upload or capture an image");
@@ -69,46 +81,66 @@ export default function UploadPanel() {
 
     setLoading(true);
     setShowDownload(false);
+    setResult("Analyzing plant...");
 
-    const res = await fetch("/analyze", {
-      method: "POST",
-      body: formData,
-    });
+    try {
+      const res = await fetch(`${API}/analyze`, {
+        method: "POST",
+        body: formData,
+      });
 
-    const data = await res.json();
-    setLoading(false);
+      if (!res.ok) {
+        throw new Error("Server error");
+      }
 
-    if (data.result) {
+      const data = await res.json();
+
       setResult(data.result);
       setImageData(data.image);
       setShowDownload(true);
-    } else {
-      setResult("Analysis failed.");
+    } catch (err) {
+      console.error(err);
+      setResult("❌ Failed to analyze plant. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  // ===== DOWNLOAD PDF =====
+  /* =========================
+     DOWNLOAD PDF (FIXED)
+  ========================= */
   const downloadPDF = async () => {
-    const res = await fetch("/download", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        result,
-        image: imageData,
-      }),
-    });
+    try {
+      const res = await fetch(`${API}/download`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          result,
+          image: imageData,
+        }),
+      });
 
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
+      if (!res.ok) {
+        throw new Error("PDF error");
+      }
 
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "FloraScan_Report.pdf";
-    a.click();
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
 
-    URL.revokeObjectURL(url);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "FloraScan_Report.pdf";
+      a.click();
+
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("❌ Failed to download PDF");
+    }
   };
 
+  /* =========================
+     UI
+  ========================= */
   return (
     <section className="app">
       <div className="grid">
@@ -116,7 +148,6 @@ export default function UploadPanel() {
         <div className="panel">
           <h2>Upload or Capture</h2>
 
-          {/* UPLOAD BOX */}
           <div
             className="upload-box"
             onClick={() => setShowOptions(true)}
@@ -125,7 +156,6 @@ export default function UploadPanel() {
             <p>Upload plant image</p>
           </div>
 
-          {/* OPTIONS */}
           {showOptions && (
             <div className="upload-options">
               <button
@@ -150,7 +180,6 @@ export default function UploadPanel() {
             </div>
           )}
 
-          {/* HIDDEN INPUT */}
           <input
             ref={fileRef}
             type="file"
@@ -159,7 +188,6 @@ export default function UploadPanel() {
             onChange={handleUpload}
           />
 
-          {/* CAMERA */}
           {showCamera && (
             <>
               <video
@@ -171,14 +199,10 @@ export default function UploadPanel() {
                   marginTop: "15px",
                 }}
               />
-
-              <button onClick={capturePhoto}>
-                Capture Photo
-              </button>
+              <button onClick={capturePhoto}>Capture Photo</button>
             </>
           )}
 
-          {/* PREVIEW */}
           {preview && (
             <img
               src={preview}
@@ -187,7 +211,7 @@ export default function UploadPanel() {
             />
           )}
 
-          <button onClick={analyzePlant}>
+          <button onClick={analyzePlant} disabled={loading}>
             <i className="fa-solid fa-brain"></i> Analyze Plant
           </button>
 
