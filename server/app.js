@@ -4,6 +4,7 @@ import multer from "multer";
 import PDFDocument from "pdfkit";
 import fs from "fs";
 import path from "path";
+import cors from "cors";
 import { fileURLToPath } from "url";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
@@ -18,15 +19,54 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = process.env.PORT || 5000;
 
-// configure multer
-const upload = multer({ dest: "upload/" });
+/* ===============================
+   REQUIRED MIDDLEWARE
+================================ */
+
+// CORS – FRONTEND URL YAHAN AATA HAI
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5000",          // local frontend
+      "https://florascanai.vercel.app", // deployed frontend
+    ],
+    methods: ["GET", "POST"],
+  })
+);
+
 app.use(express.json({ limit: "10mb" }));
 app.use(express.static("public"));
 
-// initialize Google Generative AI
+/* ===============================
+   FIX: Render upload folder issue
+================================ */
+
+const uploadDir = path.join(__dirname, "upload");
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+}
+
+// configure multer
+const upload = multer({ dest: uploadDir });
+
+/* ===============================
+   GOOGLE GEMINI INIT
+================================ */
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// ANALYZE ROUTE
+/* ===============================
+   ROOT ROUTE (Health Check)
+================================ */
+
+app.get("/", (req, res) => {
+  res.send("🌿 FloraScan API is running successfully");
+});
+
+/* ===============================
+   ANALYZE ROUTE
+================================ */
+
 app.post("/analyze", upload.single("image"), async (req, res) => {
   try {
     if (!req.file) {
@@ -34,6 +74,7 @@ app.post("/analyze", upload.single("image"), async (req, res) => {
     }
 
     const imagePath = req.file.path;
+
     const imageData = await fsPromises.readFile(imagePath, {
       encoding: "base64",
     });
@@ -54,6 +95,7 @@ app.post("/analyze", upload.single("image"), async (req, res) => {
 
     const plantInfo = result.response.text();
 
+    // remove uploaded image
     await fsPromises.unlink(imagePath);
 
     res.json({
@@ -61,14 +103,17 @@ app.post("/analyze", upload.single("image"), async (req, res) => {
       image: `data:${req.file.mimetype};base64,${imageData}`,
     });
   } catch (error) {
-    console.error("Error analyzing image:", error);
-    res
-      .status(500)
-      .json({ error: "An error occurred while analyzing the image" });
+    console.error("❌ Error analyzing image:", error);
+    res.status(500).json({
+      error: "An error occurred while analyzing the image",
+    });
   }
 });
 
-// DOWNLOAD PDF ROUTE
+/* ===============================
+   DOWNLOAD PDF ROUTE
+================================ */
+
 app.post("/download", async (req, res) => {
   const { result, image } = req.body;
 
@@ -79,8 +124,8 @@ app.post("/download", async (req, res) => {
     const filename = `plant_analysis_report_${Date.now()}.pdf`;
     const filePath = path.join(reportsDir, filename);
 
-    const writeStream = fs.createWriteStream(filePath);
     const doc = new PDFDocument();
+    const writeStream = fs.createWriteStream(filePath);
 
     doc.pipe(writeStream);
 
@@ -88,7 +133,7 @@ app.post("/download", async (req, res) => {
     doc.moveDown();
     doc.fontSize(14).text(`Date: ${new Date().toLocaleDateString()}`);
     doc.moveDown();
-    doc.fontSize(12).text(result);
+    doc.fontSize(12).text(result || "No analysis data provided");
 
     if (image) {
       const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
@@ -105,14 +150,17 @@ app.post("/download", async (req, res) => {
       });
     });
   } catch (error) {
-    console.error("Error generating PDF report:", error);
-    res
-      .status(500)
-      .json({ error: "An error occurred while generating the PDF report" });
+    console.error("❌ Error generating PDF:", error);
+    res.status(500).json({
+      error: "An error occurred while generating the PDF report",
+    });
   }
 });
 
-// START SERVER
+/* ===============================
+   START SERVER
+================================ */
+
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
