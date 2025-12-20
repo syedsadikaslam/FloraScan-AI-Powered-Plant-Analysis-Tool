@@ -1,4 +1,4 @@
-import dotenv from "dotenv";
+ import dotenv from "dotenv";
 import express from "express";
 import multer from "multer";
 import PDFDocument from "pdfkit";
@@ -20,30 +20,32 @@ const port = process.env.PORT || 5000;
 app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: "10mb" }));
 
-/* ================= UPLOAD ================= */
+/* ================= UPLOAD SETUP ================= */
 const uploadDir = path.join(__dirname, "upload");
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+}
 const upload = multer({ dest: uploadDir });
 
-/* ================= GEMINI ================= */
+/* ================= GEMINI INIT ================= */
 if (!process.env.GEMINI_API_KEY) {
-  console.error("❌ GEMINI_API_KEY NOT FOUND");
+  console.error("❌ GEMINI_API_KEY missing");
 }
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-/* ================= HEALTH ================= */
+/* ================= HEALTH CHECK ================= */
 app.get("/", (req, res) => {
   res.send("🌿 FloraScan API is running");
 });
 
-/* ================= ANALYZE ================= */
+/* ================= ANALYZE ROUTE ================= */
 app.post("/analyze", upload.single("image"), async (req, res) => {
   try {
-    // 🔒 SAFETY CHECK
+    // 🔐 Safety checks
     if (!req.file) {
       return res.status(400).json({
-        error: "No image file received by server",
+        error: "No image file received",
       });
     }
 
@@ -56,12 +58,13 @@ app.post("/analyze", upload.single("image"), async (req, res) => {
     const imagePath = req.file.path;
     const imageData = fs.readFileSync(imagePath, "base64");
 
+    // ✅ CORRECT & SUPPORTED MODEL
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-pro-vision",
     });
 
     const result = await model.generateContent([
-      "Analyze this plant image. Give species, health status, care tips, and interesting facts.",
+      "Analyze this plant image and provide:\n1. Plant species\n2. Health condition\n3. Care instructions\n4. Interesting facts\nRespond in clear plain text.",
       {
         inlineData: {
           mimeType: req.file.mimetype,
@@ -72,8 +75,9 @@ app.post("/analyze", upload.single("image"), async (req, res) => {
 
     const text =
       result?.response?.text?.() ||
-      "Unable to analyze plant. Try another image.";
+      "Unable to analyze the plant. Please try another image.";
 
+    // 🧹 cleanup
     fs.unlinkSync(imagePath);
 
     res.json({
@@ -88,12 +92,13 @@ app.post("/analyze", upload.single("image"), async (req, res) => {
   }
 });
 
-/* ================= PDF ================= */
+/* ================= PDF ROUTE ================= */
 app.post("/download", (req, res) => {
   try {
     const { result, image } = req.body;
 
     const doc = new PDFDocument();
+
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
@@ -101,24 +106,31 @@ app.post("/download", (req, res) => {
     );
 
     doc.pipe(res);
+
     doc.fontSize(20).text("Plant Analysis Report", { align: "center" });
     doc.moveDown();
-    doc.fontSize(12).text(result || "No analysis data");
+    doc.fontSize(12).text(result || "No analysis data provided");
 
     if (image) {
       const base64 = image.split(",")[1];
       const buffer = Buffer.from(base64, "base64");
-      doc.addPage().image(buffer, { fit: [500, 300], align: "center" });
+      doc.addPage().image(buffer, {
+        fit: [500, 300],
+        align: "center",
+      });
     }
 
     doc.end();
-  } catch (err) {
-    console.error("❌ PDF ERROR:", err.message);
-    res.status(500).json({ error: "PDF generation failed" });
+  } catch (error) {
+    console.error("❌ PDF ERROR:", error.message);
+    res.status(500).json({
+      error: "Failed to generate PDF",
+    });
   }
 });
 
-/* ================= START ================= */
+/* ================= START SERVER ================= */
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
+
