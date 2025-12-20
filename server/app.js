@@ -27,8 +27,8 @@ const port = process.env.PORT || 5000;
 app.use(
   cors({
     origin: [
-      "http://localhost:5000",          // local frontend
-      "https://florascanai.vercel.app", // deployed frontend
+      "http://localhost:5173",          // ✅ local frontend (Vite)
+      "https://florascanai.vercel.app", // ✅ deployed frontend
     ],
     methods: ["GET", "POST"],
   })
