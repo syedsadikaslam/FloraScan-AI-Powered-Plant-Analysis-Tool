@@ -60,7 +60,7 @@ app.post("/analyze", upload.single("image"), async (req, res) => {
 
     // ✅ CORRECT & SUPPORTED MODEL
     const model = genAI.getGenerativeModel({
-      model: "gemini-pro-vision",
+            model: "gemini-2.5-flash",
     });
 
     const result = await model.generateContent([
