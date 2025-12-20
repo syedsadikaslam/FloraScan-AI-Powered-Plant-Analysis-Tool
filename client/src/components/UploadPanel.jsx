@@ -4,7 +4,7 @@ export default function UploadPanel() {
   const fileRef = useRef(null);
   const videoRef = useRef(null);
 
-  const API = import.meta.env.VITE_API_URL;
+const API = "https://florascan-ai-powered-plant-analysis-tool.onrender.com";
 
   const [preview, setPreview] = useState(null);
   const [result, setResult] = useState("Upload or capture an image to begin.");
