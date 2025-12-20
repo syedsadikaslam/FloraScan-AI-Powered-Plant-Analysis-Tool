@@ -6,8 +6,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      "/analyze": "http://localhost:5000",
-      "/download": "http://localhost:5000",
+      "https://florascan-ai-powered-plant-analysis-tool.onrender.com",
     },
   },
 });
