@@ -10,16 +10,25 @@ export const protect = async (req, res, next) => {
     ) {
         try {
             token = req.headers.authorization.split(" ")[1];
+            console.log("Token found:", token); // DEBUG
             const decoded = jwt.verify(token, process.env.JWT_SECRET || "fallback_secret");
+            console.log("Decoded:", decoded); // DEBUG
             req.user = await User.findById(decoded.id).select("-password");
+            console.log("User found:", req.user ? req.user._id : "No user"); // DEBUG
+
+            if (!req.user) {
+                return res.status(401).json({ error: "Not authorized, user not found" });
+            }
+
             return next();
         } catch (error) {
-            console.error(error);
+            console.error("Token verification failed:", error);
             return res.status(401).json({ error: "Not authorized, token failed" });
         }
     }
 
     if (!token) {
+        console.log("No token provided in headers"); // DEBUG
         return res.status(401).json({ error: "Not authorized, no token" });
     }
 };

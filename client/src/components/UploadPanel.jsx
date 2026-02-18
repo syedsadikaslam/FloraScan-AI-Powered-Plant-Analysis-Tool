@@ -129,7 +129,11 @@ export default function UploadPanel() {
       setImageData(data.image);
     } catch (error) {
       addLog(`Error: ${error.message}`);
-      setResult(`❌ Error: ${error.response?.data?.error || error.message}. Please try again.`);
+      const serverError = error.response?.data?.error || error.message;
+      setResult(`❌ Analysis Failed: ${serverError}. \n\ncheck console for details.`);
+      if (serverError.includes("no token")) {
+        alert("You are not logged in or token is missing. Please login again.");
+      }
     } finally {
       setLoading(false);
       addLog("Analysis finished");
