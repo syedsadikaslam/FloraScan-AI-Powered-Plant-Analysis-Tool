@@ -1,5 +1,5 @@
 import { useEffect, useState, useContext } from "react";
-import axios from "axios";
+import api from "../api";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import AuthContext from "../context/AuthContext";
@@ -16,7 +16,7 @@ export default function History() {
     const fetchHistory = async () => {
         try {
             const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-            const res = await axios.get("http://localhost:5000/api/analysis/history", config);
+            const res = await api.get("/api/analysis/history", config);
             setHistory(res.data);
         } catch (error) {
             console.error("Error fetching history", error);

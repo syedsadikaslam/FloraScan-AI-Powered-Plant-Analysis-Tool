@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useContext } from "react";
 import { useParams } from "react-router-dom";
-import axios from "axios";
+import api from "../api";
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import AuthContext from "../context/AuthContext";
@@ -56,7 +56,7 @@ export default function PlantDetail() {
     /* ================= DATA FETCHING ================= */
     const fetchPlantData = async () => {
         try {
-            const res = await axios.get(`http://localhost:5000/api/analysis/history/${id}`, {
+            const res = await api.get(`/api/analysis/history/${id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setData(res.data);
@@ -76,7 +76,7 @@ export default function PlantDetail() {
         setChatInput("");
 
         try {
-            const res = await axios.post("http://localhost:5000/api/analysis/chat", {
+            const res = await api.post("/api/analysis/chat", {
                 message: userMsg,
                 context: data.result,
             });

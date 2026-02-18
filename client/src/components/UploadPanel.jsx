@@ -1,13 +1,14 @@
 import { useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Link } from "react-router-dom";
+import api from "../api";
 
 export default function UploadPanel() {
   const galleryRef = useRef(null);
   const cameraRef = useRef(null);
   const videoRef = useRef(null);
 
-  const API = "http://localhost:5000"; // Localhost for dev
+
 
   const [preview, setPreview] = useState(null);
   const [result, setResult] = useState("");
@@ -105,32 +106,18 @@ export default function UploadPanel() {
     setAnalysisId(null);
 
     try {
-      addLog(`Sending request to ${API}/api/analysis/analyze`);
+      addLog(`Sending request to /api/analysis/analyze`);
 
       const token = localStorage.getItem("token");
       const headers = token ? { "Authorization": `Bearer ${token}` } : {};
 
-      const res = await fetch(`${API}/api/analysis/analyze`, {
-        method: "POST",
+      const res = await api.post("/api/analysis/analyze", formData, {
         headers: headers,
-        body: formData,
       });
 
       addLog(`Response status: ${res.status}`);
 
-      if (!res.ok) {
-        let errorMessage = "Server error";
-        try {
-          const errorData = await res.json();
-          errorMessage = errorData.error || errorMessage;
-        } catch (e) {
-          const text = await res.text();
-          errorMessage = `Non-JSON error: ${text.substring(0, 50)}`;
-        }
-        throw new Error(errorMessage);
-      }
-
-      const data = await res.json();
+      const data = res.data;
       addLog("Data received. Result length: " + (data.result ? data.result.length : 0));
 
       if (!data.result) {
@@ -142,7 +129,7 @@ export default function UploadPanel() {
       setImageData(data.image);
     } catch (error) {
       addLog(`Error: ${error.message}`);
-      setResult(`❌ Error: ${error.message}. Please try again.`);
+      setResult(`❌ Error: ${error.response?.data?.error || error.message}. Please try again.`);
     } finally {
       setLoading(false);
       addLog("Analysis finished");
@@ -155,8 +142,8 @@ export default function UploadPanel() {
   const testConnection = async () => {
     try {
       addLog("Testing backend connection...");
-      const res = await fetch(`${API}/api/analysis/test`);
-      const data = await res.json();
+      const res = await api.get("/api/analysis/test");
+      const data = res.data;
       addLog(`Test Result: ${JSON.stringify(data)}`);
       alert(`Backend is connected! Message: ${data.message}`);
     } catch (error) {
@@ -170,16 +157,11 @@ export default function UploadPanel() {
   ========================= */
   const downloadPDF = async () => {
     try {
-      const res = await fetch(`${API}/api/analysis/download`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ result, image: imageData }),
+      const res = await api.post("/api/analysis/download", { result, image: imageData }, {
+        responseType: 'blob'
       });
 
-      if (!res.ok) throw new Error();
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(new Blob([res.data]));
 
       const a = document.createElement("a");
       a.href = url;

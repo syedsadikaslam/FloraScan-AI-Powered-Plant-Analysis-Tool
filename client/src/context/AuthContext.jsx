@@ -1,6 +1,6 @@
 import { createContext, useState, useEffect } from "react";
 import { jwtDecode } from "jwt-decode";
-import axios from "axios";
+import api from "../api";
 
 const AuthContext = createContext();
 
@@ -34,7 +34,7 @@ export const AuthProvider = ({ children }) => {
     }, [token]);
 
     const login = async (email, password) => {
-        const res = await axios.post("http://localhost:5000/api/auth/login", {
+        const res = await api.post("/api/auth/login", {
             email,
             password,
         });
@@ -45,7 +45,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     const register = async (name, email, password) => {
-        const res = await axios.post("http://localhost:5000/api/auth/register", {
+        const res = await api.post("/api/auth/register", {
             name,
             email,
             password,
@@ -57,7 +57,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     const googleLoginInfo = async (credential) => {
-        const res = await axios.post("http://localhost:5000/api/auth/google", {
+        const res = await api.post("/api/auth/google", {
             token: credential,
         });
         localStorage.setItem("token", res.data.token);
