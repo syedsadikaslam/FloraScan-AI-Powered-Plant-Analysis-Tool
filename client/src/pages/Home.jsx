@@ -1,5 +1,9 @@
 import UploadPanel from "../components/UploadPanel";
 import Features from "../components/Features";
+import DailyTip from "../components/DailyTip";
+import SeasonalCare from "../components/SeasonalCare";
+import WaterCalculator from "../components/WaterCalculator";
+import MoonPhase from "../components/MoonPhase";
 
 export default function Home() {
   return (
@@ -13,6 +17,14 @@ export default function Home() {
       </section>
 
       <UploadPanel />
+
+      <div className="home-widgets-grid">
+        <DailyTip />
+        <SeasonalCare />
+        <MoonPhase />
+      </div>
+
+      <WaterCalculator />
 
       <Features />
     </main>

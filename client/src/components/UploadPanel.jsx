@@ -1,21 +1,28 @@
 import { useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import { Link } from "react-router-dom";
 
 export default function UploadPanel() {
   const galleryRef = useRef(null);
   const cameraRef = useRef(null);
   const videoRef = useRef(null);
 
-  const API = "https://florascan-ai-powered-plant-analysis-tool.onrender.com";
+  const API = "http://localhost:5000"; // Localhost for dev
 
   const [preview, setPreview] = useState(null);
-  const [result, setResult] = useState("Upload or capture an image to begin.");
+  const [result, setResult] = useState("");
+  const [analysisId, setAnalysisId] = useState(null);
   const [imageData, setImageData] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [showDownload, setShowDownload] = useState(false);
-
   const [showOptions, setShowOptions] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [stream, setStream] = useState(null);
+  const [debugLog, setDebugLog] = useState([]); // Debug state
+
+  const addLog = (msg) => {
+    setDebugLog((prev) => [...prev, `${new Date().toLocaleTimeString()} - ${msg}`]);
+    console.log(msg);
+  };
 
   /* =========================
      FILE HANDLER (COMMON)
@@ -26,7 +33,8 @@ export default function UploadPanel() {
 
     setPreview(URL.createObjectURL(file));
     setShowCamera(false);
-    setShowDownload(false);
+    setResult("");
+    setAnalysisId(null);
   };
 
   /* =========================
@@ -88,29 +96,72 @@ export default function UploadPanel() {
       return;
     }
 
+    addLog("Starting analysis...");
     const formData = new FormData();
     formData.append("image", file);
 
     setLoading(true);
-    setResult("Analyzing plant...");
-    setShowDownload(false);
+    setResult("");
+    setAnalysisId(null);
 
     try {
-      const res = await fetch(`${API}/analyze`, {
+      addLog(`Sending request to ${API}/api/analysis/analyze`);
+
+      const token = localStorage.getItem("token");
+      const headers = token ? { "Authorization": `Bearer ${token}` } : {};
+
+      const res = await fetch(`${API}/api/analysis/analyze`, {
         method: "POST",
+        headers: headers,
         body: formData,
       });
 
-      if (!res.ok) throw new Error("Server error");
+      addLog(`Response status: ${res.status}`);
+
+      if (!res.ok) {
+        let errorMessage = "Server error";
+        try {
+          const errorData = await res.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          const text = await res.text();
+          errorMessage = `Non-JSON error: ${text.substring(0, 50)}`;
+        }
+        throw new Error(errorMessage);
+      }
 
       const data = await res.json();
+      addLog("Data received. Result length: " + (data.result ? data.result.length : 0));
+
+      if (!data.result) {
+        throw new Error("Received empty result from server");
+      }
+
       setResult(data.result);
+      setAnalysisId(data.id);
       setImageData(data.image);
-      setShowDownload(true);
-    } catch {
-      setResult("❌ Failed to analyze plant. Please try again.");
+    } catch (error) {
+      addLog(`Error: ${error.message}`);
+      setResult(`❌ Error: ${error.message}. Please try again.`);
     } finally {
       setLoading(false);
+      addLog("Analysis finished");
+    }
+  };
+
+  /* =========================
+     TEST CONNECTION
+  ========================= */
+  const testConnection = async () => {
+    try {
+      addLog("Testing backend connection...");
+      const res = await fetch(`${API}/api/analysis/test`);
+      const data = await res.json();
+      addLog(`Test Result: ${JSON.stringify(data)}`);
+      alert(`Backend is connected! Message: ${data.message}`);
+    } catch (error) {
+      addLog(`Test Failed: ${error.message}`);
+      alert("Backend connection failed!");
     }
   };
 
@@ -119,7 +170,7 @@ export default function UploadPanel() {
   ========================= */
   const downloadPDF = async () => {
     try {
-      const res = await fetch(`${API}/download`, {
+      const res = await fetch(`${API}/api/analysis/download`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ result, image: imageData }),
@@ -145,10 +196,11 @@ export default function UploadPanel() {
      UI
   ========================= */
   return (
-    <section className="app">
-      <div className="grid">
+    <section className="upload-card-container">
+      <div className="upload-card">
         {/* LEFT PANEL */}
-        <div className="panel">
+        <div className="panel-content">
+
           <h2>Upload or Capture</h2>
 
           <div
@@ -160,30 +212,32 @@ export default function UploadPanel() {
           </div>
 
           {showOptions && (
-            <div className="upload-options">
+            <div className="upload-options" style={{ marginTop: "15px", display: "flex", gap: "10px" }}>
               <button
                 className="secondary"
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   galleryRef.current.click();
                   setShowOptions(false);
                 }}
               >
-                <i className="fa-solid fa-folder-open"></i> Choose from Device
+                <i className="fa-solid fa-folder-open"></i> Device
               </button>
 
               <button
                 className="secondary"
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   openCamera();
                   setShowOptions(false);
                 }}
               >
-                <i className="fa-solid fa-camera"></i> Open Camera
+                <i className="fa-solid fa-camera"></i> Camera
               </button>
             </div>
           )}
 
-          {/* GALLERY INPUT */}
+          {/* INPUTS */}
           <input
             ref={galleryRef}
             type="file"
@@ -191,8 +245,6 @@ export default function UploadPanel() {
             hidden
             onChange={handleUpload}
           />
-
-          {/* CAMERA INPUT (MOBILE ONLY) */}
           <input
             ref={cameraRef}
             type="file"
@@ -202,6 +254,7 @@ export default function UploadPanel() {
             onChange={handleUpload}
           />
 
+          {/* CAMERA VIEW */}
           {showCamera && (
             <>
               <video
@@ -219,32 +272,60 @@ export default function UploadPanel() {
             </>
           )}
 
+          {/* PREVIEW */}
           {preview && (
             <img
               src={preview}
               alt="preview"
-              style={{ width: "100%", marginTop: "15px" }}
+              className="preview-img"
             />
           )}
 
-          <button onClick={analyzePlant} disabled={loading}>
-            <i className="fa-solid fa-brain"></i> Analyze Plant
+          <button onClick={analyzePlant} disabled={loading || !preview}>
+            <i className="fa-solid fa-brain"></i> {loading ? "Analyzing..." : "Analyze Plant"}
           </button>
 
-          {loading && <div id="loading">Analyzing...</div>}
-        </div>
-
-        {/* RIGHT PANEL */}
-        <div className="panel">
-          <h2>Analysis Result</h2>
-          <div id="result">{result}</div>
-
-          {showDownload && (
-            <button className="danger" onClick={downloadPDF}>
-              <i className="fa-solid fa-file-pdf"></i> Download PDF
-            </button>
+          {loading && (
+            <div className="loading-container">
+              <div className="spinner"></div>
+              <p className="loading-text">Analyzing plant features & checking health...</p>
+            </div>
           )}
+
+          {/* DEBUG LOG */}
+
         </div>
+
+        {/* RIGHT PANEL (RESULT) */}
+        {result ? (
+          <div className="panel-content" style={{ marginTop: "40px", borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "20px" }}>
+            <h2>Analysis Result</h2>
+
+            <div className="result-content">
+
+              <div className="markdown-result">
+                <ReactMarkdown>{result}</ReactMarkdown>
+              </div>
+            </div>
+
+            <div className="actions">
+              <button onClick={downloadPDF} className="secondary">
+                <i className="fa-solid fa-file-pdf"></i> Download PDF
+              </button>
+              {analysisId && (
+                <Link to={`/plant/${analysisId}`}>
+                  <button className="secondary">
+                    <i className="fa-solid fa-comments"></i> Chat with AI about this Plant
+                  </button>
+                </Link>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="panel-content" style={{ marginTop: "40px", opacity: 0.6, textAlign: "center" }}>
+            <p>Results will appear here after analysis.</p>
+          </div>
+        )}
       </div>
     </section>
   );

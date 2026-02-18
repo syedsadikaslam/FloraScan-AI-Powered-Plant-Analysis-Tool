@@ -25,9 +25,6 @@ export default function Footer() {
             <i className="fa-brands fa-linkedin"></i>
           </a>
 
-          <a href="https://instagram.com/syed_sadik2001" target="_blank">
-            <i className="fa-brands fa-instagram"></i>
-          </a>
         </div>
 
       </div>
